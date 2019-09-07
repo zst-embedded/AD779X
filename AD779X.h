@@ -138,7 +138,7 @@ class AD779X
 	public:
 	 unsigned char adcFail;
 		AD779X(float vRef);
-		void Begin(int csPin);
+		void Begin(int inPin, int outPin, int clkPin, int csPin);
 		void Setup(unsigned char numberOfChannels = 3, unsigned char firstChannel = 0, unsigned char secondChannel = 1, unsigned char thirdChannel = 2);
 		void Config(unsigned char gain = 0x07, unsigned char coding = 0x01, unsigned char updateRate = 0x09, unsigned char buffer = 0x01, unsigned char refDet = 0x00, unsigned char burnoutCurrent = 0x00, unsigned char powerSwitch = 0x00);
 		void cRead(unsigned char channel, unsigned char enter);		
@@ -151,7 +151,7 @@ class AD779X
 	private:
 		bool _adcPresent;
 		unsigned long _previousMillis, _settleTime, _offsetReg[3], _fullScaleReg[3], _dataRaw[3];
-		unsigned char _csPin, _nBytes, _adcChannels, _numberOfChannels, _channelIndex, _modeRegFByte, _modeRegSByte, _configRegFByte,_configRegSByte, _adcFlags, _channelArray[3];
+		unsigned char _csPin, _inPin, _outPin, _clkPin, _nBytes, _adcChannels, _numberOfChannels, _channelIndex, _modeRegFByte, _modeRegSByte, _configRegFByte,_configRegSByte, _adcFlags, _channelArray[3];
 		float _vRef, _gain, _datamV[3];
 		long _interval;
 		void Init();
@@ -165,5 +165,6 @@ class AD779X
 		bool adcFlag(unsigned char flag);
 		unsigned char adcCommRegByte(unsigned char registerAddressBits, unsigned char operation);
 		unsigned long adcRead(unsigned char registerSelection);
+		uint8_t softwareSPI(int csPin, int inPin, int outPin, int clkPin, uint8_t shOut);
 };
 #endif 

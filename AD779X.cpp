@@ -60,14 +60,14 @@ unsigned long AD779X::adcRead(unsigned char registerSelection) {
 	unsigned char incomingByte = 0;
 	if (!(registerSelection == DATA_REG && adcFlag(CREAD))) {					// in CREAD there is no need to specify the Communication register for a read to Data register
 		unsigned char commReg = adcCommRegByte(registerSelection, READ_REG);
-		incomingByte = SPI.transfer(commReg);
+		incomingByte = softwareSPItranfer(commReg);
 	}
 	else {
 		#if DEBUG_ADC
 			Serial.println("ADC in CREAD mode");
 		#endif
 	}
-	incomingByte = SPI.transfer(STUFFIN);
+	incomingByte = softwareSPItranfer(STUFFIN);
 	if (registerSelection == STATUS_REG || registerSelection == ID_REG || registerSelection == IO_REG) {		
 		registerValue = incomingByte;
 		#if DEBUG_ADC
@@ -82,7 +82,7 @@ unsigned long AD779X::adcRead(unsigned char registerSelection) {
 			Serial.print(incomingByte, BIN);
 		#endif
 		registerValue = incomingByte << 8; 		// store selected register FByte
-		incomingByte = SPI.transfer(STUFFIN);	// read selected register S(econd)Byte
+		incomingByte = softwareSPItranfer(STUFFIN);	// read selected register S(econd)Byte
 		#if DEBUG_ADC
 			Serial.print(" Second Byte: ");
 			Serial.print(incomingByte, BIN);
@@ -97,7 +97,7 @@ unsigned long AD779X::adcRead(unsigned char registerSelection) {
 		}
 		else {
 			registerValue <<= 8;
-			incomingByte = SPI.transfer(STUFFIN);	// read selected register Third Byte
+			incomingByte = softwareSPItranfer(STUFFIN);	// read selected register Third Byte
 			registerValue |= incomingByte;			// store 24-bit register value
 			registerValue &= 0xFFFFFF;
 			#if DEBUG_ADC
@@ -113,7 +113,7 @@ unsigned long AD779X::adcRead(unsigned char registerSelection) {
 
 void AD779X::adcWrite(unsigned char registerSelection, unsigned char val) {	// write Mode Register and select Operating Mode OR write Offset/Full-Scale register value
 	unsigned char commReg = adcCommRegByte(registerSelection, WRITE_REG);
-	unsigned char incomingByte = SPI.transfer(commReg);						// specify the communication register for a writing operation to the selected register	
+	unsigned char incomingByte = softwareSPItranfer(commReg);						// specify the communication register for a writing operation to the selected register	
 	if (registerSelection == CONFIG_REG) {
 		_configRegSByte = (_configRegSByte & CHANNEL_MASK) | val;
 		#if DEBUG_ADC
@@ -122,8 +122,8 @@ void AD779X::adcWrite(unsigned char registerSelection, unsigned char val) {	// w
 			Serial.print("Writing Configuration Register SByte: ");
 			Serial.println(_configRegSByte, BIN);			
 		#endif
-		incomingByte = SPI.transfer(_configRegFByte);						// write CONFIGURATION REGISTER FByte
-		incomingByte = SPI.transfer(_configRegSByte);						// write CONFIGURATION REGISTER SByte - val: Channel Select
+		incomingByte = softwareSPItranfer(_configRegFByte);						// write CONFIGURATION REGISTER FByte
+		incomingByte = softwareSPItranfer(_configRegSByte);						// write CONFIGURATION REGISTER SByte - val: Channel Select
 	}
 	else if (registerSelection == MODE_REG) {
 		_modeRegFByte = (_modeRegFByte & OPERATING_MODE_MASK) | val;
@@ -133,15 +133,15 @@ void AD779X::adcWrite(unsigned char registerSelection, unsigned char val) {	// w
 			Serial.print("Writing Mode Register SByte: ");
 			Serial.println(_modeRegSByte, BIN);			
 		#endif
-		incomingByte = SPI.transfer(_modeRegFByte);							// write MODE REGISTER FByte - val: Operating Mode
-		incomingByte = SPI.transfer(_modeRegSByte);							// write MODE REGISTER SByte
+		incomingByte = softwareSPItranfer(_modeRegFByte);							// write MODE REGISTER FByte - val: Operating Mode
+		incomingByte = softwareSPItranfer(_modeRegSByte);							// write MODE REGISTER SByte
 	}
 	else if (registerSelection == IO_REG) {									// write IO REGISTER
-		incomingByte = SPI.transfer(val);
+		incomingByte = softwareSPItranfer(val);
 	}
 	else if (registerSelection == OFFSET_REG || registerSelection == FULL_SCALE_REG) {	// write OFFSET or FULL-SCALE REGISTER (16-bits for AD7798 / 24-bits for AD7799)
 		for (int i = 0; i < _nBytes; i++) {
-			incomingByte = SPI.transfer(val >> 8*(_nBytes - i - 1));
+			incomingByte = softwareSPItranfer(val >> 8*(_nBytes - i - 1));
 		}
 	}
 	// delay(1);
@@ -182,7 +182,7 @@ void AD779X::adcReset() {						// write 32 ones to reset ADC
 	#endif	
 	byte incomingByte = 0;
 	for (int i = 0; i < 4; i++) {				// send 0xFFFFFFFF
-		incomingByte = SPI.transfer(RESET_ADC);
+		incomingByte = softwareSPItranfer(RESET_ADC);
 	}
 	delayMicroseconds(500);						// (datasheet --> p.23 ~p.19) wait 500us
 	#if DEBUG_ADC
@@ -247,9 +247,29 @@ AD779X::AD779X(float vRef) {
 	_vRef = vRef;
 }
 
-void AD779X::Begin(int csPin) {
+uint8_t AD779X::softwareSPItranfer(uint8_t shOut) {
+  uint8_t shIn = 0;
+  for(int i = 0; i < 8; i++) {
+    if (shOut > 127)  digitalWrite(_outPin, 1);
+    else              digitalWrite(_outPin, 0);
+    if (digitalRead(_inPin)) shIn += 1;
+    digitalWrite (_clkPin, 1);
+    digitalWrite (_clkPin, 0);
+    if (i != 7) shIn <<= 1;
+    shOut <<= 1;
+  }
+  return shIn;
+}
+
+void AD779X::Begin(int inPin, int outPin, int clkPin, int csPin) {
 	_csPin = csPin;							// store the CS pin
+	_inPin = inPin;
+	_outPin = outPin;
+	_clkPin = clkPin;
 	pinMode(_csPin, OUTPUT);				// set cs pin as output
+	pinMode(_clkPin, OUTPUT);
+	pinMode(_outPin, OUTPUT);
+	pinMode(_inPin, INPUT);
 	#if DEBUG_ADC
 		Serial.println("Start of Begin()");
 		Serial.print("ADC CS PIN: ");
@@ -575,11 +595,11 @@ void AD779X::cRead(unsigned char channel, unsigned char enter) {
 	unsigned char incomingByte = 0;
 	if (enter && !adcFlag(CREAD)) {
 		adcFlag(SET, CREAD);
-		incomingByte = SPI.transfer(ENTER_CREAD);
+		incomingByte = softwareSPItranfer(ENTER_CREAD);
 	}
 	else if (!enter && adcFlag(CREAD)) {
 		adcFlag(CLEAR, CREAD);
-		incomingByte = SPI.transfer(EXIT_CREAD);
+		incomingByte = softwareSPItranfer(EXIT_CREAD);
 	}
 }
 
